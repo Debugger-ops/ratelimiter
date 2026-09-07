@@ -45,6 +45,23 @@ async function main() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '64kb' }));
 
+
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'Rate Limiter API',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      echo: '/api/echo',
+      report: '/api/report',
+      login: '/api/login',
+      quota: '/api/quota',
+      metrics: '/metrics',
+      admin: '/admin',
+    },
+  });
+});
+
   const deps = { limiter, policies, metrics };
   const strictDeps = { limiter: strictLimiter, policies, metrics };
 
