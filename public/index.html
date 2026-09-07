@@ -27,6 +27,19 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
     --radius: 14px;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    /* Chart series — categorical slots 1 and 8, stepped for the dark surface.
+       Validated on this card surface: CVD ΔE 19.2, normal-vision ΔE 29.0, both ≥3:1. */
+    --series-allowed: #3987e5;
+    --series-throttled: #e66767;
+    --grid: #212c46;
+    --axis: #35456b;
+    /* Status palette — fixed, never themed, never reused as a series colour.
+       All four clear 3:1 on the dark surface; on light, warning/serious are
+       sub-3:1 by design, which is why every chip carries an icon AND a word. */
+    --st-good: #0ca30c;
+    --st-warn: #fab219;
+    --st-serious: #ec835a;
+    --st-critical: #d03b3b;
   }
   :root[data-theme="light"] {
     --bg: #f4f6fb;
@@ -46,6 +59,11 @@
     --bad: #d64545;
     --bad-bg: rgba(214, 69, 69, .1);
     --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25);
+    /* Same two slots stepped for the light surface — validated separately. */
+    --series-allowed: #2a78d6;
+    --series-throttled: #e34948;
+    --grid: #eaeef5;
+    --axis: #c9d3e2;
   }
 
   * { box-sizing: border-box; }
@@ -127,12 +145,27 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 18px 18px 16px;
     box-shadow: var(--shadow);
-    display: flex; flex-direction: column; min-height: 148px;
+    display: flex; flex-direction: column; min-height: 132px;
   }
   .card h2 {
     margin: 0 0 10px; font-size: 11.5px; font-weight: 600;
     letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint);
   }
+  .card-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .card-head h2 { margin-bottom: 0; }
+
+  /* 429 severity chip — icon + word + colour, never colour alone. */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    padding: 3px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    border: 1px solid currentColor; color: var(--text-faint);
+  }
+  .chip .glyph { font-size: 10px; line-height: 1; }
+  .chip[data-level="good"]     { color: var(--st-good); }
+  .chip[data-level="warning"]  { color: var(--st-warn); }
+  .chip[data-level="serious"]  { color: var(--st-serious); }
+  .chip[data-level="critical"] { color: var(--st-critical); }
   .value {
     margin: 0; font-size: 34px; font-weight: 650; line-height: 1.05;
     letter-spacing: -.02em; font-variant-numeric: tabular-nums;
@@ -152,9 +185,56 @@
   }
   @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 
-  .spark { display: block; width: 100%; height: 46px; margin-top: 10px; overflow: visible; }
-  .spark .line { fill: none; stroke-width: 1.75; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
-  .spark .area { stroke: none; opacity: .16; }
+  /* ---------- traffic chart ---------- */
+  .chart-card { margin-top: 14px; padding-bottom: 14px; }
+  .chart-head {
+    display: flex; flex-wrap: wrap; gap: 10px 16px;
+    align-items: baseline; justify-content: space-between; margin-bottom: 6px;
+  }
+  .chart-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+  .chart-note { margin: 3px 0 0; font-size: 12.5px; color: var(--text-faint); }
+
+  .legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-dim); }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+  .plot-wrap { position: relative; margin-top: 10px; }
+  #chart { display: block; width: 100%; height: 260px; touch-action: none; }
+  #chart:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+  #chart text { font-size: 11px; fill: var(--text-faint); font-variant-numeric: tabular-nums; }
+  #chart .grid  { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+  #chart .axis  { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+  #chart .fill  { stroke: none; opacity: .2; }
+  #chart .stroke { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  #chart .hair  { stroke: var(--text-faint); stroke-width: 1; shape-rendering: crispEdges; }
+  #chart .knob  { stroke: var(--surface); stroke-width: 2; }
+  #chart .endlabel { font-size: 11.5px; font-weight: 600; }
+  #chart .empty { fill: var(--text-faint); font-size: 12.5px; }
+
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none;
+    display: none;            /* display:none, not opacity/visibility — a hidden
+                                 box still keeps its layout width and, parked at
+                                 its old x, widens the page after a resize */
+    transform: translate(-50%, -100%);
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: 9px; padding: 8px 10px; min-width: 132px;
+    box-shadow: var(--shadow); font-size: 12.5px;
+  }
+  .tip[data-show="1"] { display: block; }
+  .tip .when { color: var(--text-faint); font-size: 11.5px; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+  .tip .row { display: flex; align-items: center; gap: 7px; margin-top: 3px; }
+  .tip .key { width: 12px; height: 2px; border-radius: 2px; flex: none; }
+  .tip .num { font-weight: 650; font-variant-numeric: tabular-nums; margin-left: auto; }
+  .tip .nm { color: var(--text-dim); }
+  .tip .total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; }
+
+  table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  table.data caption { text-align: left; color: var(--text-faint); font-size: 12px; padding-bottom: 8px; }
+  table.data th, table.data td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  table.data th { color: var(--text-faint); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+  .table-scroll { max-height: 260px; overflow: auto; margin-top: 10px; }
 
   /* ---------- policy ---------- */
   .policy {
@@ -185,7 +265,10 @@
     border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface);
   }
 
-  .stale .value, .stale .meta, .stale .spark, .stale .bar { opacity: .45; }
+  /* Refetch keeps the frame: hold the last render, dimmed, rather than
+     flashing a skeleton or collapsing the layout. */
+  .stale .value, .stale .meta, .stale .bar { opacity: .45; }
+  .stale .plot-wrap, .stale .table-scroll { opacity: .5; }
   .sr {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -201,12 +284,19 @@
       <p class="sub">Redis-backed token bucket &middot; live monitor</p>
     </div>
     <div class="controls">
+      <label class="sr" for="range">Traffic graph time range</label>
+      <select id="range" title="Traffic graph time range">
+        <option value="120000">Last 2 min</option>
+        <option value="600000" selected>Last 10 min</option>
+        <option value="1800000">Last 30 min</option>
+        <option value="3600000">Last 60 min</option>
+      </select>
       <label class="sr" for="interval">Refresh interval</label>
-      <select id="interval">
-        <option value="1000">1s</option>
-        <option value="2000" selected>2s</option>
-        <option value="5000">5s</option>
-        <option value="15000">15s</option>
+      <select id="interval" title="Refresh interval">
+        <option value="1000">every 1s</option>
+        <option value="2000" selected>every 2s</option>
+        <option value="5000">every 5s</option>
+        <option value="15000">every 15s</option>
       </select>
       <button id="pause" aria-pressed="false" title="Pause auto-refresh (P)">Pause</button>
       <button id="refresh" title="Refresh now (R)">Refresh</button>
@@ -229,20 +319,17 @@
       <h2>Requests allowed</h2>
       <p class="value"><span id="allowed">&mdash;</span></p>
       <p class="meta" id="allowedRate">waiting for data&hellip;</p>
-      <div class="spacer"></div>
-      <svg class="spark" id="sparkAllowed" viewBox="0 0 200 46" preserveAspectRatio="none" aria-hidden="true">
-        <path class="area" fill="var(--ok)"></path><path class="line" stroke="var(--ok)"></path>
-      </svg>
     </article>
 
     <article class="card" id="card-throttled">
-      <h2>Throttled &middot; 429</h2>
-      <p class="value"><span id="throttled">&mdash;</span></p>
+      <div class="card-head">
+        <h2>Throttled &middot; 429</h2>
+        <span class="chip" id="throttleChip" data-level="none">
+          <span class="glyph" aria-hidden="true">&#9679;</span><span id="throttleLevel">&mdash;</span>
+        </span>
+      </div>
+      <p class="value" style="margin-top:10px"><span id="throttled">&mdash;</span></p>
       <p class="meta" id="throttledRate">waiting for data&hellip;</p>
-      <div class="spacer"></div>
-      <svg class="spark" id="sparkThrottled" viewBox="0 0 200 46" preserveAspectRatio="none" aria-hidden="true">
-        <path class="area" fill="var(--bad)"></path><path class="line" stroke="var(--bad)"></path>
-      </svg>
     </article>
 
     <article class="card" id="card-quota">
@@ -262,6 +349,28 @@
     </article>
   </main>
 
+  <section class="card chart-card">
+    <div class="chart-head">
+      <div>
+        <h2 class="chart-title">Traffic</h2>
+        <p class="chart-note" id="chartNote">requests per second, stacked — the top edge is total offered load</p>
+      </div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--series-allowed)"></i>Allowed</span>
+        <span><i class="swatch" style="background:var(--series-throttled)"></i>Throttled&nbsp;(429)</span>
+        <button id="viewToggle" aria-pressed="false" title="Show the underlying samples as a table">Table</button>
+      </div>
+    </div>
+
+    <div class="plot-wrap" id="plotWrap">
+      <svg id="chart" role="img" tabindex="0"
+           aria-label="Traffic over time: allowed and throttled requests per second."></svg>
+      <div class="tip" id="tip" aria-hidden="true"></div>
+    </div>
+
+    <div class="table-scroll" id="tableWrap" hidden></div>
+  </section>
+
   <section class="policy">
     <h2 style="margin:0 0 2px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Policy</h2>
     <dl class="kv">
@@ -276,6 +385,7 @@
 
   <footer>
     <kbd>R</kbd> refresh &nbsp;&middot;&nbsp; <kbd>P</kbd> pause &nbsp;&middot;&nbsp;
+    focus the chart and use <kbd>&larr;</kbd><kbd>&rarr;</kbd> to read values &nbsp;&middot;&nbsp;
     polling stops while the tab is hidden and backs off automatically when the server is unreachable.
   </footer>
 
@@ -298,10 +408,12 @@ const CFG = {
   urls:        { health: "/health", quota: "/api/quota", metrics: "/metrics" },
   metricName:  "ratelimit_requests_total",
   verdictLabel:"verdict",
-  historyLen:  90,      // samples kept for the sparklines
+  retainMs:    3600000, // 60 min of samples kept in memory
+  maxSamples:  4000,    // hard cap so a 1s interval can't grow unbounded
   timeoutMs:   5000,    // per-request abort
   maxBackoff:  30000,   // ceiling when the server is down
-  staleAfter:  3        // × interval before values are dimmed
+  staleAfter:  3,       // × interval before values are dimmed
+  gapFactor:   2.5      // dt > this × interval ⇒ draw a gap, not a straight line
 };
 
 /* ------------------------------------------------------------------ *
@@ -316,7 +428,10 @@ const S = {
   timer: null,
   lastOk: 0,
   prev: null,                    // previous counter snapshot
-  history: [],                   // [{ allowed, throttled }] rates per second
+  rangeMs: 600000,               // traffic-graph window
+  history: [],                   // [{ t, allowed, throttled }] rates per second
+  hover: null,                   // index into history under the pointer/caret
+  tableView: false,
   totals: { allowed: 0, throttled: 0 },
   quota: null,
   resetAt: null,                 // absolute epoch ms of next window reset
@@ -484,10 +599,14 @@ function applyMetrics(text) {
     const reset = allowed < S.prev.allowed || throttled < S.prev.throttled;
     if (dt > 0.05 && !reset) {
       S.history.push({
+        t:         Date.now(),
         allowed:   Math.max(0, (allowed   - S.prev.allowed)   / dt),
         throttled: Math.max(0, (throttled - S.prev.throttled) / dt)
       });
-      if (S.history.length > CFG.historyLen) S.history.shift();
+      const cutoff = Date.now() - CFG.retainMs;
+      while (S.history.length && (S.history[0].t < cutoff || S.history.length > CFG.maxSamples)) {
+        S.history.shift();
+      }
     } else if (reset) {
       S.history.length = 0;
     }
@@ -498,27 +617,334 @@ function applyMetrics(text) {
 }
 
 /* ------------------------------------------------------------------ *
- * Sparklines
+ * Traffic chart
+ *
+ * A stacked area on ONE y-axis (req/s): allowed on the bottom, throttled
+ * on top, so the upper edge reads as total offered load and the red band
+ * is the share the limiter rejected. Series colours are categorical slots
+ * 1 and 8; the obvious green/red pair fails colour-vision separation
+ * (ΔE 4.1 deutan) and was rejected for that reason.
  * ------------------------------------------------------------------ */
-const VIEW = { w: 200, h: 46, pad: 3 };
+const NS = "http://www.w3.org/2000/svg";
+// right margin leaves room for the end labels; top for the axis title
+const M = { top: 26, right: 46, bottom: 26, left: 48 };
+const GAP = 2;                       // surface gap between stacked fills
 
-function drawSpark(svgId, values) {
-  const svg  = $(svgId);
-  const area = svg.querySelector(".area");
-  const line = svg.querySelector(".line");
+let geom = null;                     // last plot geometry, for hit-testing
 
-  if (values.length < 2) { area.setAttribute("d", ""); line.setAttribute("d", ""); return; }
+function el(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+  return n;
+}
+function txt(node, s) { node.appendChild(document.createTextNode(s)); return node; }
 
-  const max = Math.max(1e-9, ...values);
-  const n   = values.length;
-  const stepX = VIEW.w / (n - 1);
-  const y = (v) => VIEW.h - VIEW.pad - (v / max) * (VIEW.h - VIEW.pad * 2);
+function niceMax(v) {
+  if (!(v > 0)) return 1;
+  const base = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / base;
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return step * base;
+}
 
-  let d = `M0 ${y(values[0]).toFixed(2)}`;
-  for (let i = 1; i < n; i++) d += ` L${(i * stepX).toFixed(2)} ${y(values[i]).toFixed(2)}`;
+const TIME_STEPS = [1e3, 5e3, 1e4, 15e3, 3e4, 6e4, 12e4, 3e5, 6e5, 9e5, 18e5];
+/* Tick count follows the available width, so labels never collide on a phone. */
+function timeStep(span, plotW) {
+  const want = span / Math.max(2, Math.floor(plotW / 95));
+  return TIME_STEPS.find(s => s >= want) || TIME_STEPS[TIME_STEPS.length - 1];
+}
+function clock(t, withSeconds) {
+  const d = new Date(t);
+  const p = (n) => String(n).padStart(2, "0");
+  return withSeconds ? `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+                     : `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
-  line.setAttribute("d", d);
-  area.setAttribute("d", `${d} L${VIEW.w} ${VIEW.h} L0 ${VIEW.h} Z`);
+function renderChart() {
+  const svg = $("chart");
+  const rect = svg.getBoundingClientRect();
+  const W = Math.max(280, Math.round(rect.width));
+  const H = Math.max(160, Math.round(rect.height));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+  const now = Date.now();
+  const t0 = now - S.rangeMs;
+
+  // Keep one sample either side of the window so the area reaches both edges.
+  const all = S.history;
+  let lo = 0;
+  while (lo < all.length - 1 && all[lo + 1].t < t0) lo++;
+  const pts = all.slice(lo);
+
+  const x = (t) => M.left + ((t - t0) / S.rangeMs) * plotW;
+  const yMax = niceMax(Math.max(...pts.map(p => p.allowed + p.throttled), 0) * 1.15);
+  const y = (v) => M.top + plotH - (v / yMax) * plotH;
+
+  geom = { W, H, plotW, plotH, x, y, t0, now, yMax, pts, lo };
+
+  /* ---- grid + y axis ---- */
+  const gGrid = el("g", null);
+  for (let i = 0; i <= 4; i++) {
+    const v = (yMax * i) / 4;
+    const yy = Math.round(y(v)) + 0.5;
+    gGrid.appendChild(el("line", { class: i === 0 ? "axis" : "grid", x1: M.left, x2: M.left + plotW, y1: yy, y2: yy }));
+    gGrid.appendChild(txt(el("text", { x: M.left - 8, y: yy + 4, "text-anchor": "end" }), fmtRate(v)));
+  }
+  gGrid.appendChild(txt(el("text", { x: 2, y: 12, "text-anchor": "start" }), "req/s"));
+  svg.appendChild(gGrid);
+
+  /* ---- x axis ---- */
+  const gAxis = el("g", null);
+  const step = timeStep(S.rangeMs, plotW);
+  const showSecs = step < 60000;
+  for (let t = Math.ceil(t0 / step) * step; t <= now; t += step) {
+    const xx = Math.round(x(t)) + 0.5;
+    gAxis.appendChild(el("line", { class: "grid", x1: xx, x2: xx, y1: M.top, y2: M.top + plotH }));
+    gAxis.appendChild(txt(el("text", { x: xx, y: M.top + plotH + 16, "text-anchor": "middle" }), clock(t, showSecs)));
+  }
+  svg.appendChild(gAxis);
+
+  if (pts.length < 2) {
+    svg.appendChild(txt(el("text", {
+      class: "empty", x: M.left + plotW / 2, y: M.top + plotH / 2, "text-anchor": "middle"
+    }), S.history.length ? "collecting samples…" : "waiting for the second poll…"));
+    hideTip();
+    return;
+  }
+
+  /* ---- split on gaps so a pause isn't drawn as a straight line ---- */
+  const maxGap = S.intervalMs * CFG.gapFactor;
+  const runs = [];
+  let run = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].t - pts[i - 1].t > maxGap) { runs.push(run); run = []; }
+    run.push(pts[i]);
+  }
+  runs.push(run);
+
+  const clipId = "plotClip";
+  const defs = el("defs", null);
+  const clip = el("clipPath", { id: clipId });
+  clip.appendChild(el("rect", { x: M.left, y: M.top - 2, width: plotW, height: plotH + 2 }));
+  defs.appendChild(clip);
+  svg.appendChild(defs);
+
+  const gData = el("g", { "clip-path": `url(#${clipId})` });
+  const base = M.top + plotH;
+
+  for (const r of runs) {
+    if (r.length < 2) continue;
+    const X = r.map(p => x(p.t));
+    const yA = r.map(p => y(p.allowed));
+    const yT = r.map(p => y(p.allowed + p.throttled));
+
+    // allowed band: baseline → allowed
+    let d = `M${X[0].toFixed(1)} ${base}`;
+    for (let i = 0; i < r.length; i++) d += ` L${X[i].toFixed(1)} ${yA[i].toFixed(1)}`;
+    d += ` L${X[X.length - 1].toFixed(1)} ${base} Z`;
+    gData.appendChild(el("path", { class: "fill", d, fill: "var(--series-allowed)" }));
+
+    // throttled band: allowed (minus a 2px surface gap) → total
+    let dt = "";
+    for (let i = 0; i < r.length; i++) dt += `${i ? " L" : "M"}${X[i].toFixed(1)} ${yT[i].toFixed(1)}`;
+    for (let i = r.length - 1; i >= 0; i--) {
+      const bottom = Math.max(yT[i], yA[i] - GAP);
+      dt += ` L${X[i].toFixed(1)} ${bottom.toFixed(1)}`;
+    }
+    gData.appendChild(el("path", { class: "fill", d: dt + " Z", fill: "var(--series-throttled)" }));
+
+    // 2px boundary lines
+    let la = "", lt = "";
+    for (let i = 0; i < r.length; i++) {
+      la += `${i ? " L" : "M"}${X[i].toFixed(1)} ${yA[i].toFixed(1)}`;
+      lt += `${i ? " L" : "M"}${X[i].toFixed(1)} ${yT[i].toFixed(1)}`;
+    }
+    gData.appendChild(el("path", { class: "stroke", d: lt, stroke: "var(--series-throttled)" }));
+    gData.appendChild(el("path", { class: "stroke", d: la, stroke: "var(--series-allowed)" }));
+  }
+  svg.appendChild(gData);
+
+  /* ---- selective direct labels on the latest point ---- */
+  const last = pts[pts.length - 1];
+  if (now - last.t < maxGap) {
+    // Labels wear text ink, never the series colour — the line end beside them
+    // is the coloured mark that carries identity.
+    const lx = Math.min(x(last.t) + 8, W - M.right + 6);
+    const ya = y(last.allowed), yt = y(last.allowed + last.throttled);
+    const g = el("g", null);
+    g.appendChild(txt(el("text", {
+      class: "endlabel", x: lx, y: Math.max(M.top + 8, ya + 4), fill: "var(--text)"
+    }), fmtRate(last.allowed)));
+    // Only label the second series when it won't collide with the first.
+    if (Math.abs(ya - yt) > 15 && last.throttled > 0) {
+      g.appendChild(txt(el("text", {
+        class: "endlabel", x: lx, y: Math.max(M.top + 8, yt + 4), fill: "var(--text)"
+      }), fmtRate(last.throttled)));
+    }
+    svg.appendChild(g);
+  }
+
+  /* ---- hover overlay ---- */
+  svg.appendChild(el("g", { id: "overlay" }));
+  drawHover();
+}
+
+/* Crosshair + tooltip. Snaps to the nearest sample, so the reader aims at a
+   moment in time rather than at a 2px line. */
+function drawHover() {
+  const svg = $("chart");
+  const overlay = svg.querySelector("#overlay");
+  if (!overlay) return;
+  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+
+  if (!geom || S.hover === null) { hideTip(); return; }
+  const p = S.history[S.hover];
+  if (!p || p.t < geom.t0) { hideTip(); return; }
+
+  const xx = Math.round(geom.x(p.t)) + 0.5;
+  const ya = geom.y(p.allowed);
+  const yt = geom.y(p.allowed + p.throttled);
+
+  overlay.appendChild(el("line", { class: "hair", x1: xx, x2: xx, y1: M.top, y2: M.top + geom.plotH }));
+  overlay.appendChild(el("circle", { class: "knob", cx: xx, cy: ya, r: 4, fill: "var(--series-allowed)" }));
+  overlay.appendChild(el("circle", { class: "knob", cx: xx, cy: yt, r: 4, fill: "var(--series-throttled)" }));
+
+  const tip = $("tip");
+  tip.textContent = "";
+  const when = document.createElement("div");
+  when.className = "when";
+  when.textContent = clock(p.t, true);
+  tip.appendChild(when);
+
+  const row = (name, value, color, extra) => {
+    const r = document.createElement("div");
+    r.className = "row" + (extra || "");
+    const k = document.createElement("i");
+    k.className = "key";
+    if (color) k.style.background = color;
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = name;                       // untrusted-by-habit: textContent only
+    const num = document.createElement("span");
+    num.className = "num";
+    num.textContent = value;
+    r.append(k, nm, num);
+    tip.appendChild(r);
+  };
+  row("Allowed", fmtRate(p.allowed) + "/s", "var(--series-allowed)");
+  row("Throttled", fmtRate(p.throttled) + "/s", "var(--series-throttled)");
+  row("Total", fmtRate(p.allowed + p.throttled) + "/s", "transparent", " total");
+
+  const wrap = $("plotWrap");
+  const left = Math.max(70, Math.min(wrap.clientWidth - 70, xx));
+  tip.style.left = left + "px";
+  tip.style.top = Math.max(46, Math.min(ya, yt) - 10) + "px";
+  tip.dataset.show = "1";
+}
+
+function hideTip() {
+  const tip = $("tip");
+  tip.dataset.show = "0";
+}
+
+function nearestIndex(clientX) {
+  if (!geom || !S.history.length) return null;
+  const rect = $("chart").getBoundingClientRect();
+  const px = (clientX - rect.left) * (geom.W / rect.width);
+  const t = geom.t0 + ((px - M.left) / geom.plotW) * S.rangeMs;
+  let best = null, bestD = Infinity;
+  for (let i = geom.lo; i < S.history.length; i++) {
+    const d = Math.abs(S.history[i].t - t);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+/* ------------------------------------------------------------------ *
+ * 429 severity
+ *
+ * Graded on the throttled share of the last minute of traffic, not on the
+ * lifetime totals — a burst an hour ago shouldn't keep the chip red, and a
+ * long-running process shouldn't dilute a burst happening right now.
+ * Status colour is paired with a glyph and a word, so the state is never
+ * carried by hue alone.
+ * ------------------------------------------------------------------ */
+const LEVELS = [
+  { at: 0.20, level: "critical", glyph: "▲", label: "Critical" },
+  { at: 0.05, level: "serious",  glyph: "▲", label: "High"     },
+  { at: 0.01, level: "warning",  glyph: "●", label: "Elevated" },
+  { at: 0,    level: "good",     glyph: "●", label: "Nominal"  }
+];
+
+function applyThrottleLevel() {
+  const chip = $("throttleChip");
+  const cut = Date.now() - 60000;
+  const recent = S.history.filter(p => p.t >= cut);
+
+  if (!recent.length) {
+    chip.dataset.level = "none";
+    $("throttleLevel").textContent = "—";
+    chip.removeAttribute("title");
+    return;
+  }
+  const a = recent.reduce((s, p) => s + p.allowed, 0);
+  const t = recent.reduce((s, p) => s + p.throttled, 0);
+  const share = a + t > 0 ? t / (a + t) : 0;
+  const hit = LEVELS.find(l => share >= l.at);
+
+  chip.dataset.level = hit.level;
+  chip.querySelector(".glyph").textContent = hit.glyph;
+  $("throttleLevel").textContent = hit.label;
+  chip.title = `${(share * 100).toFixed(1)}% of the last minute's requests were rejected with 429`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Table view — the same samples, reachable without hovering
+ * ------------------------------------------------------------------ */
+function renderTable() {
+  const wrap = $("tableWrap");
+  wrap.textContent = "";
+  const table = document.createElement("table");
+  table.className = "data";
+  const cap = document.createElement("caption");
+  cap.textContent = "Most recent samples, newest first.";
+  table.appendChild(cap);
+
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  for (const h of ["Time", "Allowed /s", "Throttled /s", "Total /s"]) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = h;
+    hr.appendChild(th);
+  }
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const rows = S.history.slice(-120).reverse();
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.textContent = "No samples yet.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+  for (const p of rows) {
+    const tr = document.createElement("tr");
+    for (const cell of [clock(p.t, true), fmtRate(p.allowed), fmtRate(p.throttled), fmtRate(p.allowed + p.throttled)]) {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
 }
 
 /* ------------------------------------------------------------------ *
@@ -569,14 +995,17 @@ function render() {
   $("allowed").textContent   = fmtCount(allowed);
   $("throttled").textContent = fmtCount(throttled);
   $("allowedRate").textContent = last
-    ? `${fmtRate(last.allowed)} req/s · peak ${fmtRate(Math.max(...S.history.map(h => h.allowed)))}`
+    ? `${fmtRate(last.allowed)} req/s now · peak ${fmtRate(Math.max(...S.history.map(h => h.allowed)))}`
     : "collecting…";
   $("throttledRate").textContent = total > 0
     ? `${((throttled / total) * 100).toFixed(1)}% of all requests` + (last ? ` · ${fmtRate(last.throttled)} /s` : "")
     : "collecting…";
+  applyThrottleLevel();
 
-  drawSpark("sparkAllowed",   S.history.map(h => h.allowed));
-  drawSpark("sparkThrottled", S.history.map(h => h.throttled));
+  if (S.tableView) renderTable(); else renderChart();
+  $("chartNote").textContent = S.history.length
+    ? `requests per second, stacked — the top edge is total offered load · ${S.history.length} samples`
+    : "requests per second, stacked — the top edge is total offered load";
 
   /* -- quota ------------------------------------------------------- */
   const q = S.quota || {};
@@ -668,6 +1097,48 @@ $("interval").addEventListener("change", (e) => {
   S.backoff = 0;
   schedule();
 });
+$("range").addEventListener("change", (e) => {
+  S.rangeMs = Number(e.target.value);
+  S.hover = null;
+  if (!S.tableView) renderChart();
+});
+
+/* ---- chart interaction: pointer, keyboard, resize ---- */
+const chart = $("chart");
+chart.addEventListener("pointermove", (e) => { S.hover = nearestIndex(e.clientX); drawHover(); });
+chart.addEventListener("pointerleave", () => { S.hover = null; drawHover(); });
+chart.addEventListener("blur", () => { S.hover = null; drawHover(); });
+chart.addEventListener("keydown", (e) => {
+  if (!S.history.length) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    const start = S.hover === null ? S.history.length - 1 : S.hover + dir;
+    S.hover = Math.max(geom ? geom.lo : 0, Math.min(S.history.length - 1, start));
+    drawHover();
+  } else if (e.key === "Escape") {
+    S.hover = null;
+    drawHover();
+  }
+});
+
+$("viewToggle").addEventListener("click", () => {
+  S.tableView = !S.tableView;
+  const btn = $("viewToggle");
+  btn.textContent = S.tableView ? "Chart" : "Table";
+  btn.setAttribute("aria-pressed", String(S.tableView));
+  $("plotWrap").hidden = S.tableView;
+  $("tableWrap").hidden = !S.tableView;
+  if (S.tableView) renderTable(); else renderChart();
+});
+
+if (typeof ResizeObserver === "function") {
+  let raf = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => { if (!S.tableView) renderChart(); });
+  }).observe($("plotWrap"));
+}
 $("theme").addEventListener("click", () => {
   // Dark is the deliberate default for an ops screen; the toggle is the escape hatch.
   const root = document.documentElement;
