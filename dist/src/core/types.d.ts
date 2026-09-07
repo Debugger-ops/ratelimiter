@@ -1,5 +1,5 @@
 import type { LeaseOptions } from './lease.js';
-export declare const ALGORITHMS: readonly ["token_bucket", "sliding_window_log", "sliding_window_counter"];
+export declare const ALGORITHMS: readonly ['token_bucket', 'sliding_window_log', 'sliding_window_counter'];
 export type Algorithm = (typeof ALGORITHMS)[number];
 export interface Policy {
     /** Stable name, e.g. "free", "pro", "login-endpoint". */

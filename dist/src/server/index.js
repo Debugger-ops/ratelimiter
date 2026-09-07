@@ -96,7 +96,7 @@ async function main() {
         res.type('text/plain; version=0.0.4').send(lines.join('\n'));
     });
     app.use(express.static(join(here, '..', '..', 'public')));
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, "0.0.0.0", () => {
         console.log(`flowgate listening on http://localhost:${PORT}`);
         console.log(`  dashboard  http://localhost:${PORT}/`);
         console.log(`  redis      ${REDIS_URL}`);
