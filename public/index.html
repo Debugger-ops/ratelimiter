@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Rate Limiter Dashboard</title>
+<style>
+  /* ---------- tokens ---------- */
+  :root {
+    --bg: #0b1120;
+    --bg-grad: radial-gradient(1200px 600px at 15% -10%, #16233f 0%, transparent 60%);
+    --surface: #131c31;
+    --surface-2: #1a2440;
+    --border: #26324f;
+    --border-strong: #35456b;
+    --text: #f1f5f9;
+    --text-dim: #93a1b8;
+    --text-faint: #64748b;
+    --accent: #6690ff;
+    --ok: #34d399;
+    --ok-bg: rgba(52, 211, 153, .12);
+    --warn: #fbbf24;
+    --warn-bg: rgba(251, 191, 36, .12);
+    --bad: #f87171;
+    --bad-bg: rgba(248, 113, 113, .12);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6fb;
+    --bg-grad: radial-gradient(1200px 600px at 15% -10%, #e2e9f8 0%, transparent 60%);
+    --surface: #ffffff;
+    --surface-2: #f7f9fd;
+    --border: #e1e7f0;
+    --border-strong: #c9d3e2;
+    --text: #0f172a;
+    --text-dim: #55637a;
+    --text-faint: #8593a8;
+    --accent: #2f5cf0;
+    --ok: #0f9d63;
+    --ok-bg: rgba(15, 157, 99, .1);
+    --warn: #b7791f;
+    --warn-bg: rgba(183, 121, 31, .12);
+    --bad: #d64545;
+    --bad-bg: rgba(214, 69, 69, .1);
+    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -14px rgba(15,23,42,.25);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg-grad), var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 56px; }
+
+  /* ---------- header ---------- */
+  .top {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    align-items: flex-start; justify-content: space-between;
+  }
+  h1 { margin: 0; font-size: clamp(22px, 3vw, 28px); letter-spacing: -.02em; }
+  .sub { margin: 4px 0 0; color: var(--text-dim); font-size: 14px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  button, select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 9px; padding: 7px 12px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover, select:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  button:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .icon-btn { min-width: 36px; text-align: center; }
+
+  /* ---------- status bar ---------- */
+  .statusbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    margin-top: 22px;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 500;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .pill.ok   { background: var(--ok-bg);   border-color: transparent; color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+  .pill.bad  { background: var(--bad-bg);  border-color: transparent; color: var(--bad); }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor; flex: none;
+  }
+  .pill.ok .dot { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .pill.ok .dot { animation: none; } }
+
+  .tick { margin-left: auto; color: var(--text-faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+  .banner {
+    display: none; margin-top: 12px; padding: 11px 14px;
+    border-radius: 10px; font-size: 13.5px;
+    background: var(--bad-bg); color: var(--bad);
+    border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
+  }
+  .banner.show { display: block; }
+
+  /* ---------- cards ---------- */
+  .grid {
+    display: grid; gap: 14px; margin-top: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 18px 16px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column; min-height: 148px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 11.5px; font-weight: 600;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint);
+  }
+  .value {
+    margin: 0; font-size: 34px; font-weight: 650; line-height: 1.05;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  }
+  .value .unit { font-size: 15px; font-weight: 500; color: var(--text-faint); margin-left: 5px; }
+  .meta { margin: 8px 0 0; font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .spacer { flex: 1; }
+
+  .bar {
+    height: 7px; border-radius: 4px; margin-top: 12px;
+    background: var(--surface-2); border: 1px solid var(--border); overflow: hidden;
+  }
+  .bar > i {
+    display: block; height: 100%; width: 0%;
+    background: var(--ok); border-radius: inherit;
+    transition: width .4s ease, background .3s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+
+  .spark { display: block; width: 100%; height: 46px; margin-top: 10px; overflow: visible; }
+  .spark .line { fill: none; stroke-width: 1.75; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+  .spark .area { stroke: none; opacity: .16; }
+
+  /* ---------- policy ---------- */
+  .policy {
+    margin-top: 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+  }
+  .kv { display: grid; gap: 12px 24px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-top: 4px; }
+  .kv div { min-width: 0; }
+  .kv dt { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint); }
+  .kv dd { margin: 4px 0 0; font-family: var(--mono); font-size: 13.5px; word-break: break-word; }
+
+  /* ---------- endpoints ---------- */
+  .endpoints { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .ep {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 11px; border-radius: 8px; font-size: 12.5px;
+    font-family: var(--mono);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .ep .dot { width: 7px; height: 7px; }
+  .ep.ok .dot { background: var(--ok); }
+  .ep.bad .dot { background: var(--bad); }
+  .ep .lat { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+  footer { margin-top: 20px; color: var(--text-faint); font-size: 12px; }
+  kbd {
+    font-family: var(--mono); font-size: 11px; padding: 1.5px 5px;
+    border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface);
+  }
+
+  .stale .value, .stale .meta, .stale .spark, .stale .bar { opacity: .45; }
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Rate Limiter</h1>
+      <p class="sub">Redis-backed token bucket &middot; live monitor</p>
+    </div>
+    <div class="controls">
+      <label class="sr" for="interval">Refresh interval</label>
+      <select id="interval">
+        <option value="1000">1s</option>
+        <option value="2000" selected>2s</option>
+        <option value="5000">5s</option>
+        <option value="15000">15s</option>
+      </select>
+      <button id="pause" aria-pressed="false" title="Pause auto-refresh (P)">Pause</button>
+      <button id="refresh" title="Refresh now (R)">Refresh</button>
+      <button id="theme" class="icon-btn" title="Toggle theme" aria-label="Toggle colour theme">&#9788;</button>
+    </div>
+  </header>
+
+  <div class="statusbar">
+    <span id="status" class="pill" role="status" aria-live="polite">
+      <span class="dot"></span><span id="statusText">Connecting&hellip;</span>
+    </span>
+    <span id="mode" class="pill warn" hidden>Auto-refresh paused</span>
+    <span id="tick" class="tick"></span>
+  </div>
+
+  <div id="banner" class="banner" role="alert"></div>
+
+  <main class="grid">
+    <article class="card" id="card-allowed">
+      <h2>Requests allowed</h2>
+      <p class="value"><span id="allowed">&mdash;</span></p>
+      <p class="meta" id="allowedRate">waiting for data&hellip;</p>
+      <div class="spacer"></div>
+      <svg class="spark" id="sparkAllowed" viewBox="0 0 200 46" preserveAspectRatio="none" aria-hidden="true">
+        <path class="area" fill="var(--ok)"></path><path class="line" stroke="var(--ok)"></path>
+      </svg>
+    </article>
+
+    <article class="card" id="card-throttled">
+      <h2>Throttled &middot; 429</h2>
+      <p class="value"><span id="throttled">&mdash;</span></p>
+      <p class="meta" id="throttledRate">waiting for data&hellip;</p>
+      <div class="spacer"></div>
+      <svg class="spark" id="sparkThrottled" viewBox="0 0 200 46" preserveAspectRatio="none" aria-hidden="true">
+        <path class="area" fill="var(--bad)"></path><path class="line" stroke="var(--bad)"></path>
+      </svg>
+    </article>
+
+    <article class="card" id="card-quota">
+      <h2>Remaining quota</h2>
+      <p class="value"><span id="remaining">&mdash;</span><span class="unit">/ <span id="limit">&mdash;</span></span></p>
+      <p class="meta" id="quotaMeta">&nbsp;</p>
+      <div class="spacer"></div>
+      <div class="bar"><i id="quotaBar"></i></div>
+    </article>
+
+    <article class="card" id="card-reset">
+      <h2>Window resets in</h2>
+      <p class="value"><span id="reset">&mdash;</span><span class="unit" id="resetUnit"></span></p>
+      <p class="meta" id="resetMeta">&nbsp;</p>
+      <div class="spacer"></div>
+      <div class="bar"><i id="resetBar"></i></div>
+    </article>
+  </main>
+
+  <section class="policy">
+    <h2 style="margin:0 0 2px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Policy</h2>
+    <dl class="kv">
+      <div><dt>Algorithm</dt><dd id="pAlgorithm">&mdash;</dd></div>
+      <div><dt>Policy</dt><dd id="pPolicy">&mdash;</dd></div>
+      <div><dt>Window</dt><dd id="pWindow">&mdash;</dd></div>
+      <div><dt>Throttle ratio</dt><dd id="pRatio">&mdash;</dd></div>
+    </dl>
+  </section>
+
+  <div class="endpoints" id="endpoints"></div>
+
+  <footer>
+    <kbd>R</kbd> refresh &nbsp;&middot;&nbsp; <kbd>P</kbd> pause &nbsp;&middot;&nbsp;
+    polling stops while the tab is hidden and backs off automatically when the server is unreachable.
+  </footer>
+
+  <p class="sr" id="srSummary" role="status" aria-live="polite"></p>
+</div>
+
+<noscript>
+  <p style="max-width:1080px;margin:0 auto;padding:0 20px 40px;color:#f87171">
+    This dashboard needs JavaScript to poll <code>/health</code>, <code>/api/quota</code> and <code>/metrics</code>.
+  </p>
+</noscript>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Config
+ * ------------------------------------------------------------------ */
+const CFG = {
+  urls:        { health: "/health", quota: "/api/quota", metrics: "/metrics" },
+  metricName:  "ratelimit_requests_total",
+  verdictLabel:"verdict",
+  historyLen:  90,      // samples kept for the sparklines
+  timeoutMs:   5000,    // per-request abort
+  maxBackoff:  30000,   // ceiling when the server is down
+  staleAfter:  3        // × interval before values are dimmed
+};
+
+/* ------------------------------------------------------------------ *
+ * State
+ * ------------------------------------------------------------------ */
+const S = {
+  intervalMs: 2000,
+  paused: false,
+  inFlight: false,
+  backoff: 0,
+  failures: 0,
+  timer: null,
+  lastOk: 0,
+  prev: null,                    // previous counter snapshot
+  history: [],                   // [{ allowed, throttled }] rates per second
+  totals: { allowed: 0, throttled: 0 },
+  quota: null,
+  resetAt: null,                 // absolute epoch ms of next window reset
+  windowMs: null,
+  health: null,
+  endpoints: {}
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------------ *
+ * Formatting helpers
+ * ------------------------------------------------------------------ */
+const nf = new Intl.NumberFormat();
+const nfCompact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+
+function fmtCount(n) {
+  if (!Number.isFinite(n)) return "—";
+  return n >= 100000 ? nfCompact.format(n) : nf.format(Math.round(n));
+}
+function fmtRate(n) {
+  if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "0";
+  if (n < 1) return n.toFixed(2);
+  if (n < 10) return n.toFixed(1);
+  return nf.format(Math.round(n));
+}
+function fmtDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const s = ms / 1000;
+  if (s < 10) return { value: s.toFixed(1), unit: "s" };
+  if (s < 90) return { value: String(Math.round(s)), unit: "s" };
+  const m = Math.floor(s / 60);
+  if (m < 60) return { value: `${m}:${String(Math.round(s % 60)).padStart(2, "0")}`, unit: "min" };
+  return { value: `${Math.floor(m / 60)}h ${m % 60}m`, unit: "" };
+}
+
+/* ------------------------------------------------------------------ *
+ * Prometheus text-format parser
+ * Handles comments, arbitrary label order, escaped label values,
+ * trailing timestamps, and Inf/NaN values.
+ * ------------------------------------------------------------------ */
+const SAMPLE_RE = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{.*\})?[ \t]+(.+)$/;
+const LABEL_RE  = /([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*"((?:[^"\\]|\\.)*)"/g;
+
+function parsePrometheus(text) {
+  const samples = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.charCodeAt(0) === 35 /* # */) continue;
+
+    const m = SAMPLE_RE.exec(line);
+    if (!m) continue;
+
+    const value = Number(m[3].trim().split(/[ \t]+/)[0]);
+    if (!Number.isFinite(value)) continue;      // drops NaN / +Inf
+
+    const labels = {};
+    if (m[2]) {
+      LABEL_RE.lastIndex = 0;
+      let l;
+      while ((l = LABEL_RE.exec(m[2])) !== null) {
+        labels[l[1]] = l[2].replace(/\\(.)/g, (_, c) => (c === "n" ? "\n" : c === "t" ? "\t" : c));
+      }
+    }
+    samples.push({ name: m[1], labels, value });
+  }
+  return samples;
+}
+
+/** Sum every series of `name`, grouped by one label. Series count is
+ *  irrelevant — routes, methods and status codes all collapse correctly. */
+function sumByLabel(samples, name, label) {
+  const out = Object.create(null);
+  for (const s of samples) {
+    if (s.name !== name) continue;
+    const key = s.labels[label] ?? "unknown";
+    out[key] = (out[key] || 0) + s.value;
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Fetching — never throws, always records endpoint health
+ * ------------------------------------------------------------------ */
+async function probe(name, url, as) {
+  const started = performance.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CFG.timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      cache: "no-store",
+      headers: { Accept: as === "json" ? "application/json" : "text/plain" }
+    });
+    const ms = Math.round(performance.now() - started);
+    if (!res.ok) {
+      S.endpoints[name] = { ok: false, ms, detail: `HTTP ${res.status}` };
+      return { ok: false };
+    }
+    const data = as === "json" ? await res.json() : await res.text();
+    S.endpoints[name] = { ok: true, ms };
+    return { ok: true, data };
+  } catch (err) {
+    const ms = Math.round(performance.now() - started);
+    const detail = err && err.name === "AbortError" ? "timeout" : "unreachable";
+    S.endpoints[name] = { ok: false, ms, detail };
+    return { ok: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function poll() {
+  if (S.inFlight) return;
+  S.inFlight = true;
+  try {
+    const [health, quota, metrics] = await Promise.all([
+      probe("/health",     CFG.urls.health,  "json"),
+      probe("/api/quota",  CFG.urls.quota,   "json"),
+      probe("/metrics",    CFG.urls.metrics, "text")
+    ]);
+
+    if (health.ok) S.health = health.data;
+    if (quota.ok)  applyQuota(quota.data);
+    if (metrics.ok && typeof metrics.data === "string") applyMetrics(metrics.data);
+
+    const any = health.ok || quota.ok || metrics.ok;
+    if (any) { S.lastOk = Date.now(); S.failures = 0; S.backoff = 0; }
+    else     { S.failures++; S.backoff = Math.min(CFG.maxBackoff, (S.backoff || S.intervalMs) * 2); }
+
+    render();
+  } finally {
+    S.inFlight = false;
+    schedule();
+  }
+}
+
+function applyQuota(q) {
+  if (!q || typeof q !== "object") return;
+  S.quota = q;
+
+  // Prefer an explicit window from the policy string ("100;w=60"), else the
+  // largest resetInMs ever observed is a good proxy for the window length.
+  const declared = typeof q.policy === "string" ? /(?:^|;)\s*w\s*=\s*(\d+(?:\.\d+)?)/.exec(q.policy) : null;
+  if (declared) S.windowMs = Number(declared[1]) * 1000;
+
+  const resetIn = Number(q.resetInMs);
+  if (Number.isFinite(resetIn) && resetIn >= 0) {
+    S.resetAt = Date.now() + resetIn;
+    if (!declared) S.windowMs = Math.max(S.windowMs || 0, resetIn);
+  }
+}
+
+function applyMetrics(text) {
+  const byVerdict = sumByLabel(parsePrometheus(text), CFG.metricName, CFG.verdictLabel);
+  const allowed   = byVerdict.allowed   || 0;
+  const throttled = byVerdict.throttled || byVerdict.limited || 0;
+  const now = performance.now();
+
+  if (S.prev) {
+    const dt = (now - S.prev.t) / 1000;
+    // A counter that went backwards means the process restarted — drop the
+    // delta rather than drawing a huge negative spike.
+    const reset = allowed < S.prev.allowed || throttled < S.prev.throttled;
+    if (dt > 0.05 && !reset) {
+      S.history.push({
+        allowed:   Math.max(0, (allowed   - S.prev.allowed)   / dt),
+        throttled: Math.max(0, (throttled - S.prev.throttled) / dt)
+      });
+      if (S.history.length > CFG.historyLen) S.history.shift();
+    } else if (reset) {
+      S.history.length = 0;
+    }
+  }
+
+  S.prev = { t: now, allowed, throttled };
+  S.totals = { allowed, throttled };
+}
+
+/* ------------------------------------------------------------------ *
+ * Sparklines
+ * ------------------------------------------------------------------ */
+const VIEW = { w: 200, h: 46, pad: 3 };
+
+function drawSpark(svgId, values) {
+  const svg  = $(svgId);
+  const area = svg.querySelector(".area");
+  const line = svg.querySelector(".line");
+
+  if (values.length < 2) { area.setAttribute("d", ""); line.setAttribute("d", ""); return; }
+
+  const max = Math.max(1e-9, ...values);
+  const n   = values.length;
+  const stepX = VIEW.w / (n - 1);
+  const y = (v) => VIEW.h - VIEW.pad - (v / max) * (VIEW.h - VIEW.pad * 2);
+
+  let d = `M0 ${y(values[0]).toFixed(2)}`;
+  for (let i = 1; i < n; i++) d += ` L${(i * stepX).toFixed(2)} ${y(values[i]).toFixed(2)}`;
+
+  line.setAttribute("d", d);
+  area.setAttribute("d", `${d} L${VIEW.w} ${VIEW.h} L0 ${VIEW.h} Z`);
+}
+
+/* ------------------------------------------------------------------ *
+ * Render
+ * ------------------------------------------------------------------ */
+function render() {
+  const now = Date.now();
+  const stale = S.lastOk > 0 && now - S.lastOk > S.intervalMs * CFG.staleAfter;
+  const down  = S.failures > 0;
+
+  /* -- status pill ------------------------------------------------- */
+  const pill = $("status");
+  const redis = S.health && (S.health.redis ?? S.health.status);
+  pill.className = "pill";
+  if (down) {
+    pill.classList.add("bad");
+    $("statusText").textContent = `Server unreachable · retrying in ${Math.round(S.backoff / 1000)}s`;
+  } else if (redis === "ready" || redis === "ok" || redis === "connected") {
+    pill.classList.add("ok");
+    $("statusText").textContent = "Redis connected";
+  } else if (redis) {
+    pill.classList.add("warn");
+    $("statusText").textContent = `Redis: ${redis}`;
+  } else {
+    $("statusText").textContent = S.lastOk ? "Redis status unknown" : "Connecting…";
+  }
+
+  /* -- failure banner ---------------------------------------------- */
+  const failed = Object.entries(S.endpoints).filter(([, e]) => !e.ok);
+  const banner = $("banner");
+  if (failed.length && failed.length < 3) {
+    banner.textContent = "Degraded: " + failed.map(([n, e]) => `${n} (${e.detail})`).join(", ") +
+                         ". Other panels are still live.";
+    banner.classList.add("show");
+  } else if (failed.length === 3) {
+    banner.textContent = `Cannot reach the service (${failed[0][1].detail}). ` +
+                         `Showing the last known values from ${S.lastOk ? new Date(S.lastOk).toLocaleTimeString() : "—"}.`;
+    banner.classList.add("show");
+  } else {
+    banner.classList.remove("show");
+  }
+
+  /* -- counters ---------------------------------------------------- */
+  const { allowed, throttled } = S.totals;
+  const total = allowed + throttled;
+  const last  = S.history[S.history.length - 1];
+
+  $("allowed").textContent   = fmtCount(allowed);
+  $("throttled").textContent = fmtCount(throttled);
+  $("allowedRate").textContent = last
+    ? `${fmtRate(last.allowed)} req/s · peak ${fmtRate(Math.max(...S.history.map(h => h.allowed)))}`
+    : "collecting…";
+  $("throttledRate").textContent = total > 0
+    ? `${((throttled / total) * 100).toFixed(1)}% of all requests` + (last ? ` · ${fmtRate(last.throttled)} /s` : "")
+    : "collecting…";
+
+  drawSpark("sparkAllowed",   S.history.map(h => h.allowed));
+  drawSpark("sparkThrottled", S.history.map(h => h.throttled));
+
+  /* -- quota ------------------------------------------------------- */
+  const q = S.quota || {};
+  const limit = Number(q.limit);
+  const remaining = Number(q.remaining);
+  $("limit").textContent     = Number.isFinite(limit) ? fmtCount(limit) : "—";
+  $("remaining").textContent = Number.isFinite(remaining) ? fmtCount(remaining) : "—";
+
+  const bar = $("quotaBar");
+  if (Number.isFinite(limit) && limit > 0 && Number.isFinite(remaining)) {
+    const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+    bar.style.width = pct + "%";
+    bar.style.background = pct > 50 ? "var(--ok)" : pct > 20 ? "var(--warn)" : "var(--bad)";
+    $("quotaMeta").textContent = `${Math.round(pct)}% of the bucket left · ${fmtCount(limit - remaining)} consumed`;
+  } else {
+    bar.style.width = "0%";
+    $("quotaMeta").textContent = "no quota reported";
+  }
+
+  /* -- policy ------------------------------------------------------ */
+  $("pAlgorithm").textContent = q.algorithm || "—";
+  $("pPolicy").textContent    = q.policy || "—";
+  $("pWindow").textContent    = S.windowMs ? `${(S.windowMs / 1000).toFixed(S.windowMs % 1000 ? 1 : 0)}s` : "—";
+  $("pRatio").textContent     = total > 0 ? `${throttled} / ${total}` : "—";
+
+  /* -- endpoint strip ---------------------------------------------- */
+  $("endpoints").innerHTML = Object.entries(S.endpoints).map(([name, e]) =>
+    `<span class="ep ${e.ok ? "ok" : "bad"}"><span class="dot"></span>${name}` +
+    `<span class="lat">${e.ok ? e.ms + "ms" : e.detail}</span></span>`
+  ).join("");
+
+  /* -- stale dimming + a11y summary -------------------------------- */
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("stale", stale));
+  $("srSummary").textContent =
+    `${fmtCount(allowed)} allowed, ${fmtCount(throttled)} throttled, ` +
+    `${Number.isFinite(remaining) ? fmtCount(remaining) : "unknown"} remaining of ${Number.isFinite(limit) ? fmtCount(limit) : "unknown"}.`;
+
+  drawTick();
+}
+
+/* Countdown + "updated Ns ago" tick independently of polling, so the
+   numbers stay honest between requests. */
+function drawTick() {
+  const now = Date.now();
+
+  if (S.resetAt !== null) {
+    const left = Math.max(0, S.resetAt - now);
+    const { value, unit } = fmtDuration(left);
+    $("reset").textContent = value;
+    $("resetUnit").textContent = unit;
+    if (S.windowMs) {
+      const elapsed = Math.max(0, Math.min(1, 1 - left / S.windowMs));
+      $("resetBar").style.width = (elapsed * 100).toFixed(1) + "%";
+      $("resetBar").style.background = "var(--accent)";
+      $("resetMeta").textContent = `${Math.round(elapsed * 100)}% through the current window`;
+    }
+  }
+
+  $("tick").textContent = S.lastOk
+    ? `updated ${Math.max(0, Math.round((now - S.lastOk) / 1000))}s ago`
+    : "";
+}
+
+/* ------------------------------------------------------------------ *
+ * Scheduling
+ * ------------------------------------------------------------------ */
+function schedule() {
+  clearTimeout(S.timer);
+  if (S.paused || document.hidden) return;
+  S.timer = setTimeout(poll, S.backoff || S.intervalMs);
+}
+
+function setPaused(paused) {
+  S.paused = paused;
+  const btn = $("pause");
+  btn.textContent = paused ? "Resume" : "Pause";
+  btn.setAttribute("aria-pressed", String(paused));
+  $("mode").hidden = !paused;
+  if (paused) clearTimeout(S.timer); else poll();
+}
+
+/* ------------------------------------------------------------------ *
+ * Wiring
+ * ------------------------------------------------------------------ */
+$("refresh").addEventListener("click", () => { S.backoff = 0; poll(); });
+$("pause").addEventListener("click", () => setPaused(!S.paused));
+$("interval").addEventListener("change", (e) => {
+  S.intervalMs = Number(e.target.value);
+  S.backoff = 0;
+  schedule();
+});
+$("theme").addEventListener("click", () => {
+  // Dark is the deliberate default for an ops screen; the toggle is the escape hatch.
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearTimeout(S.timer);
+  else if (!S.paused) poll();          // catch up immediately on return
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  if (e.key === "r" || e.key === "R") { S.backoff = 0; poll(); }
+  if (e.key === "p" || e.key === "P") setPaused(!S.paused);
+});
+
+setInterval(drawTick, 250);
+poll();
+</script>
+</body>
+</html>

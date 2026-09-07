@@ -8,6 +8,7 @@ RUN npm ci --omit=dev && npm i -g tsx@4
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY public ./public
 
 ENV NODE_ENV=production
 ENV PORT=8080
