@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # A rate limiter's state is disposable — losing it costs one window of
+    # over-admission, not data. Persistence off keeps the fsync off the hot
+    # path; allkeys-lru means a memory spike sheds cold buckets instead of
+    # returning OOM errors on every write.
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Two app instances behind the same Redis: the point of the project is that
+  # the limit is enforced across processes, not per process. Hit either one.
+  api-1:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-token}
+      # Flip to 1 on both instances to watch the dashboard's "served without
+      # Redis" tile climb while the limit stays exactly where it was.
+      LEASE_ENABLED: ${LEASE_ENABLED:-0}
+    ports: ['8080:8080']
+    depends_on:
+      redis: { condition: service_healthy }
+
+  api-2:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-token}
+      LEASE_ENABLED: ${LEASE_ENABLED:-0}
+    ports: ['8081:8080']
+    depends_on:
+      redis: { condition: service_healthy }

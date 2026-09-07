@@ -1,0 +1,32 @@
+{
+  "name": "flowgate",
+  "version": "1.0.0",
+  "description": "Distributed rate limiter as a service — token bucket & sliding window on Redis, with middleware and a live dashboard.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "start": "tsx src/server/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "tsx bench/bench.ts",
+    "traffic": "tsx bench/traffic.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "tsx": "^4.19.1"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.7",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.4",
+    "autocannon": "^7.15.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
